@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/static/login.css">
+    <title>Login | Ludiflex</title>
+</head>
+<body>
+    <div class="login-box">
+        <div class="login-header">
+            <header>Welcome To Musik-Assit</header>
+        </div>
+
+        <form id="loginForm" method="POST" action="/login">
+            <input type="text" name="username" placeholder="Username" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <button type="submit">Login</button>
+        </form>
+        <!-- <div class="input-box">
+            <input type="text" class="input-field" id="loginEmail" placeholder="Email" autocomplete="off" required>
+            <input type="text" class="input-field" placeholder="Email" autocomplete="off" required> -->
+        <!-- </div>
+        <div class="input-box">
+            <input type="password" class="input-field" id="loginPassword" placeholder="Password" autocomplete="off" required> -->
+
+            <!-- <input type="password" class="input-field" placeholder="Password" autocomplete="off" required> -->
+        <!-- </div>  -->
+        <div class="forgot">
+            <section>
+                <input type="checkbox" id="check">
+                <label for="check">Remember me</label>
+            </section>
+            <section>
+                <a href="#">Forgot password</a>
+            </section>
+        </div>
+        <div class="input-submit">
+            <button class="submit-btn" id="loginBtn">Sign In</button>
+        </div>
+
+        <div class="sign-up-link">
+            <p>Don't have account? <a href="#">Sign Up</a></p>
+        </div>
+    </div>
+    <script>
+document.getElementById("loginBtn").addEventListener("click", async function () {
+    const email = document.getElementById("loginEmail").value;
+    const password = document.getElementById("loginPassword").value;
+
+    // Show loading or disable button here if needed
+
+    try {
+        const response = await fetch('/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: email, password }) // You use "username" for email in your Flask route
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            // Redirect to chatbot page
+            window.location.href = "/chat";
+        } else {
+            alert(result.error || "Login failed");
+        }
+    } catch (err) {
+        console.error(err);
+        alert("An error occurred. Please try again.");
+    }
+});
+</script>
+
+</body>
+</html>

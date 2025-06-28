@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Musik-Assist</title>
+  <meta name="description" content="Chat with your music assistant">
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="container">
+    <aside class="sidebar">
+      <div class="chats-list"></div>
+      <div class="status">
+        <span>⏰</span>
+        Here to help, 24/7
+      </div>
+    </aside>
+
+    <main class="chat-main">
+      <header class="chat-header">
+        <span>Musik-Assist</span>
+      </header>
+
+      <section class="chat-messages" id="chat-box">
+        <div class="message ai">
+          <div class="avatar">🤖</div>
+          <div class="bubble">🎶 Hello! I'm Musik-Assist, your Music AI assistant. How may I help you today?</div>
+        </div>
+      </section>
+
+      <footer class="chat-input">
+        <label for="file-upload" class="upload-label">📎</label>
+        <input type="file" id="file-upload" name="file" style="display: none;" />
+        <input type="text" id="user-input" placeholder="Message Musik Assistant..." autocomplete="off" />
+        <button class="send-btn" id="send-btn">➤</button>
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const sendBtn = document.getElementById('send-btn');
+      const userInput = document.getElementById('user-input');
+      const chatBox = document.getElementById('chat-box');
+
+      function addMessage(sender, message) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `message ${sender}`;
+        msgDiv.innerHTML = `
+          <div class="avatar">${sender === 'user' ? '👤' : '🤖'}</div>
+          <div class="bubble">${message}</div>
+        `;
+        chatBox.appendChild(msgDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+
+      sendBtn.addEventListener('click', async () => {
+        const message = userInput.value.trim();
+        if (!message) return;
+
+        addMessage('user', message);
+        userInput.value = '';
+
+        try {
+          const response = await fetch('/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message })
+          });
+
+          const data = await response.json();
+          if (response.ok) {
+            addMessage('bot', data.response);
+          } else {
+            addMessage('bot', data.error || 'Something went wrong.');
+          }
+        } catch (err) {
+          console.error("Chat failed:", err);
+          addMessage('bot', 'Connection failed. Try again later.');
+        }
+      });
+
+      userInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendBtn.click();
+      });
+
+      document.getElementById('file-upload').addEventListener('change', function (e) {
+        const file = e.target.files[0];
+        if (file) {
+          addMessage('user', `📎 Uploaded: ${file.name}`);
+          setTimeout(() => {
+            addMessage('bot', "🎵 Thanks for sharing! Let me know how I can assist with this file.");
+          }, 500);
+        }
+      });
+    });
+  </script>
+</body>
+</html>
