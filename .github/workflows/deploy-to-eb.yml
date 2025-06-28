@@ -19,8 +19,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-north-1
-          # aws-region: ${{ secrets.AWS_DEFAULT_REGION }}  # Should be 'eu-north-1'
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
       - name: Install EB CLI
         run: |
@@ -28,8 +27,12 @@ jobs:
           sudo apt install python3-pip -y
           pip3 install awsebcli
 
-      - name: Zip files for deployment
+      - name: Debug - Check who we are in AWS
         run: |
-          eb init -p flask mskchatbot --region ${{ secrets.AWS_DEFAULT_REGION }}
+          aws sts get-caller-identity
+
+      - name: Deploy to Elastic Beanstalk
+        run: |
+          eb init -p python-3.9 mskchatbot --region ${{ secrets.AWS_DEFAULT_REGION }}
           eb use mskchatbot-env
           eb deploy
