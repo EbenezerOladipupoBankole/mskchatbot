@@ -1,0 +1,34 @@
+name: Deploy to Elastic Beanstalk
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to EB
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Install EB CLI
+        run: |
+          sudo apt update
+          sudo apt install python3-pip -y
+          pip3 install awsebcli
+
+      - name: Zip files for deployment
+        run: |
+          eb init -p flask mskchatbot --region ${{ secrets.AWS_DEFAULT_REGION }}
+          eb use mskchatbot-env
+          eb deploy
