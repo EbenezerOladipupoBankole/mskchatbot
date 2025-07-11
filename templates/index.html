@@ -3,97 +3,352 @@
 <head>
   <meta charset="UTF-8" />
   <title>Musik-Assist</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Chat with your music assistant">
-  <link rel="stylesheet" href="/static/style.css" />
-</head>
-<body>
-  <div class="container">
-    <aside class="sidebar">
-      <div class="chats-list"></div>
-      <div class="status">
-        <span>⏰</span>
-        Here to help, 24/7
-      </div>
-    </aside>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
 
-    <main class="chat-main">
-      <header class="chat-header">
-        <span>Musik-Assist</span>
-      </header>
+    html, body {
+      height: 100%;
+      overflow-x: hidden;
+    }
 
-      <section class="chat-messages" id="chat-box">
-        <div class="message ai">
-          <div class="avatar">🤖</div>
-          <div class="bubble">🎶 Hello! I'm Musik-Assist, your Music AI assistant. How may I help you today?</div>
-        </div>
-      </section>
+    body {
+      display: flex;
+      height: 100vh;
+      background-color: #1e1e2f;
+      color: white;
+    }
 
-      <footer class="chat-input">
-        <label for="file-upload" class="upload-label">📎</label>
-        <input type="file" id="file-upload" name="file" style="display: none;" />
-        <input type="text" id="user-input" placeholder="Message Musik Assistant..." autocomplete="off" />
-        <button class="send-btn" id="send-btn">➤</button>
-      </footer>
-    </main>
-  </div>
+    /* Hamburger Menu Button */
+    .hamburger {
+      display: none;
+      background: none;
+      border: none;
+      font-size: 2rem;
+      color: white;
+      padding: 15px;
+      cursor: pointer;
+      z-index: 1001;
+    }
 
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const sendBtn = document.getElementById('send-btn');
-      const userInput = document.getElementById('user-input');
-      const chatBox = document.getElementById('chat-box');
+    /* Sidebar */
+    .sidebar {
+      width: 250px;
+      background-color: #111;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: left 0.3s ease;
+    }
 
-      function addMessage(sender, message) {
-        const msgDiv = document.createElement('div');
-        msgDiv.className = `message ${sender}`;
-        msgDiv.innerHTML = `
-          <div class="avatar">${sender === 'user' ? '👤' : '🤖'}</div>
-          <div class="bubble">${message}</div>
-        `;
-        chatBox.appendChild(msgDiv);
-        chatBox.scrollTop = chatBox.scrollHeight;
+    .sidebar h2 {
+      font-size: 1.5rem;
+      margin-bottom: 20px;
+    }
+
+    .menu ul {
+      list-style: none;
+    }
+
+    .menu li {
+      margin-bottom: 15px;
+    }
+
+    .menu a {
+      text-decoration: none;
+      color: #ccc;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: color 0.3s ease;
+    }
+
+    .menu a:hover {
+      color: #00ffcc;
+    }
+
+    .status {
+      font-size: 0.9rem;
+      color: #aaa;
+      margin-top: auto;
+    }
+
+    /* Main Chat Area */
+    .chat-main {
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+    }
+
+    .chat-header {
+      font-size: 1.5rem;
+      font-weight: bold;
+      padding: 10px;
+      border-bottom: 1px solid #444;
+      margin-bottom: 20px;
+    }
+
+    .chat-messages {
+      flex-grow: 1;
+      overflow-y: auto;
+      padding-right: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      max-height: 100%;
+    }
+
+    .message {
+      display: flex;
+      align-items: start;
+      gap: 10px;
+    }
+
+    .message.user {
+      flex-direction: row-reverse;
+      justify-content: flex-end;
+    }
+
+    .avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background-color: #333;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+    }
+
+    .bubble {
+      max-width: 80%;
+      word-wrap: break-word;
+      padding: 10px 15px;
+      border-radius: 10px;
+      line-height: 1.4;
+    }
+
+    .bubble.user {
+      background-color: #007bff;
+      color: white;
+      border-top-right-radius: 5px;
+    }
+
+    .bubble.bot {
+      background-color: #2a2a2a;
+      color: #fff;
+      border-top-left-radius: 5px;
+    }
+
+    /* Chat Input */
+    .chat-input {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .chat-input input {
+      flex-grow: 1;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 20px;
+      font-size: 1rem;
+      outline: none;
+      color: #000;
+    }
+
+    .chat-input button {
+      background-color: #007bff;
+      color: rgb(216, 203, 203);
+      border: none;
+      padding: 15px;
+      font-size: 1.5rem;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    .chat-input button:hover {
+      background-color: #0056b3;
+    }
+
+    /* Responsive Layout */
+    @media (max-width: 768px) {
+      body {
+        flex-direction: column;
+        height: auto;
       }
 
-      sendBtn.addEventListener('click', async () => {
-        const message = userInput.value.trim();
-        if (!message) return;
+      .hamburger {
+        display: block;
+        position: absolute;
+        top: 10px;
+        left: 10px;
+      }
 
-        addMessage('user', message);
-        userInput.value = '';
+      .sidebar {
+        position: fixed;
+        top: 0;
+        left: -100%;
+        width: 70%;
+        height: 100%;
+        z-index: 1000;
+      }
 
-        try {
-          const response = await fetch('/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message })
-          });
+      .sidebar.open {
+        left: 0;
+      }
 
-          const data = await response.json();
-          if (response.ok) {
-            addMessage('bot', data.response);
-          } else {
-            addMessage('bot', data.error || 'Something went wrong.');
-          }
-        } catch (err) {
-          console.error("Chat failed:", err);
-          addMessage('bot', 'Connection failed. Try again later.');
-        }
+      .chat-main {
+        margin-top: 60px;
+        padding: 15px;
+      }
+
+      .chat-header {
+        font-size: 1.2rem;
+        text-align: center;
+      }
+
+      .chat-input {
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .chat-input input,
+      .chat-input button {
+        width: 100%;
+        border-radius: 10px;
+      }
+
+      .chat-messages {
+        max-height: 60vh;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Hamburger Menu -->
+<button class="hamburger" onclick="toggleMenu()">☰</button>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div>
+    <h2>Musik-Assist</h2>
+    <nav class="menu">
+      <ul>
+        <li><a href="{{ url_for('index') }}" onclick="toggleMenu()">🏠 Home</a></li>
+        <li><a href="{{ url_for('profile') }}" onclick="toggleMenu()">👤 Profile</a></li>
+        <li><a href="{{ url_for('settings') }}" onclick="toggleMenu()">⚙️ Settings</a></li>
+        <li><a href="{{ url_for('about') }}" onclick="toggleMenu()">ℹ️ About</a></li>
+        <li><a href="/login/google" onclick="toggleMenu()">🔑 Login with Google</a></li>
+        <li><a href="#" onclick="logout(); toggleMenu()">🔐 Logout</a></li>
+      </ul>
+    </nav>
+  </div>
+  <div class="status">⏰ Always here to help!</div>
+</aside>
+
+<!-- Main Chat Interface -->
+<main class="chat-main">
+  <header class="chat-header">Musik-Assist</header>
+
+  <!-- Messages Container -->
+  <section class="chat-messages" id="chat-box">
+    <div class="message bot">
+      <div class="avatar">🤖</div>
+      <div class="bubble bot">🎶 Hello! I'm Musik-Assist, your Music AI assistant. How may I help you today?</div>
+    </div>
+  </section>
+
+  <!-- Chat Input -->
+  <footer class="chat-input">
+    <input type="text" id="user-input" placeholder="Your Music-Assit..." autocomplete="off" />
+    <button id="send-btn">➤</button>
+  </footer>
+</main>
+
+<!-- JavaScript -->
+<script>
+  const sendBtn = document.getElementById('send-btn');
+  const userInput = document.getElementById('user-input');
+  const chatBox = document.getElementById('chat-box');
+
+  function addMessage(sender, message) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `message ${sender === 'user' ? 'user' : 'bot'}`;
+
+    const avatar = sender === 'user' ? '👤' : '🤖';
+
+    msgDiv.innerHTML = `
+      <div class="avatar">${avatar}</div>
+      <div class="bubble ${sender === 'user' ? 'user' : 'bot'}">${message}</div>
+    `;
+    chatBox.appendChild(msgDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  async function sendMessage() {
+    const message = userInput.value.trim();
+    if (!message) return;
+
+    addMessage('user', message);
+    userInput.value = '';
+
+    try {
+      const response = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message })
       });
 
-      userInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendBtn.click();
-      });
+      const data = await response.json();
 
-      document.getElementById('file-upload').addEventListener('change', function (e) {
-        const file = e.target.files[0];
-        if (file) {
-          addMessage('user', `📎 Uploaded: ${file.name}`);
-          setTimeout(() => {
-            addMessage('bot', "🎵 Thanks for sharing! Let me know how I can assist with this file.");
-          }, 500);
-        }
-      });
-    });
-  </script>
-</body>
-</html>
+      if (response.ok) {
+        addMessage('bot', data.response);
+      } else {
+        addMessage('bot', data.error || 'Something went wrong.');
+      }
+    } catch (err) {
+      console.error("Error:", err);
+      addMessage('bot', "Connection failed.");
+    }
+  }
+
+  userInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') sendBtn.click();
+  });
+
+  sendBtn.addEventListener('click', sendMessage);
+
+  async function logout() {
+    try {
+      const res = await fetch('/logout', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        alert("You've been logged out.");
+        window.location.href = '/';
+      } else {
+        alert(data.error || "Logout failed");
+      }
+    } catch (err) {
+      console.error("Logout error:", err);
+      alert("Error logging out.");
+    }
+  }
+
+  function toggleMenu() {
+    const sidebar = document.querySelector('.sidebar');
+    sidebar.classList.toggle('open');
+  }
+</script>

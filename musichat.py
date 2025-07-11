@@ -16,6 +16,9 @@ from werkzeug.wrappers import Request, Response
 from io import BytesIO
 import base64
 from werkzeug.datastructures import Headers
+import os
+print("Current working directory:", os.getcwd())
+# print("Template folder path:", app.template_folder)
 
 # --- Load environment variables at the very top ---
 load_dotenv()
@@ -32,7 +35,11 @@ genai.configure(api_key=api_key)
 # --- Continue with the rest of your app setup ---
 
 # Initialize Flask app
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates')
+
+# --- Session Cookie Settings for OAuth reliability ---
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = False  # Set to True only if using HTTPS
 
 # --- Configuration from Environment Variables ---
 app.secret_key = os.getenv('FLASK_SECRET_KEY', secrets.token_hex(16))
@@ -44,7 +51,7 @@ AWS_REGION = os.getenv('AWS_REGION', 'eu-north-1')
 S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME', 'musicchatbot-assets')
 USERS_TABLE_NAME = os.getenv('USERS_TABLE_NAME', 'MusicChatbotUsers')
 CHAT_HISTORY_TABLE_NAME = os.getenv('CHAT_HISTORY_TABLE_NAME', 'MusicChatHistory')
-MAX_GUEST_MESSAGES = 10
+MAX_GUEST_MESSAGES = 40
 
 # Logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -226,7 +233,7 @@ initial_persona_prompt = [
     },
     {
         "role": "model",
-        "parts": [{"text": "Okay, I understand. I am Musik Assitant, and I will respond as a helpful chat assistant created by Raphael Musik Assitantal, adhering to my defined persona."}]
+        "parts": [{"text": "Okay, I understand. I am Musik Assitant, and I will respond as a helpful chat assistant created by Ebenezer Musik Assitantal, adhering to my defined persona."}]
     }
 ]
 
@@ -273,8 +280,55 @@ def login_required(f):
 
 @app.route('/')
 def index():
-    # Render the single index.html file, which now contains all modal HTML
     return render_template('index.html')
+
+@app.route('/about')
+def about():
+    return render_template('about.html')
+
+@app.route('/settings')
+def settings():
+    return render_template('settings.html')
+
+@app.route('/profile')
+def profile():
+    return render_template('profile.html')
+
+
+# @app.route('/')
+# def index():
+#     return render_template('index.html')
+
+# @app.route('/about')
+# def about():
+#     return render_template('about.html')
+
+# @app.route('/settings')
+# @login_required
+# def settings():
+#     return render_template('settings.html')
+
+# @app.route('/')
+# def index():
+#     # Render the single index.html file, which now contains all modal HTML
+#     return render_template('index.html')
+
+# @app.route('/about')
+# def about():
+#     if 'user_id' in session and session.get('logged_in'):
+#         username = session['username']
+#         logging.info(f"User '{username}' accessed /about.")
+#     else:
+#         logging.info("Guest user accessed /about.")
+    
+#     return render_template('about.html')
+
+
+# @app.route('/settings')
+# @login_required
+# def settings():
+#     logging.info(f"User '{session.get('username', 'Anonymous')}' accessed /settings.")
+#     return render_template('settings.html')
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -429,12 +483,41 @@ def check_login_status():
             "guest_message_count": guest_msg_count
         }), 200
 
+# Load hymn book data
+with open("hymn_book.json", "r", encoding="utf-8") as f:
+    hymn_book = json.load(f)
+
+def get_hymn_lyrics_by_number(number):
+    for hymn in hymn_book:
+        if str(hymn.get("number")) == str(number):
+            return f"{hymn.get('title', '')}\n{hymn.get('lyrics', '')}"
+    return None
+
 @app.route('/chat', methods=['POST'])
 def chat_endpoint():
     user_message = request.json.get('message')
     if not user_message:
         logging.warning("Chat attempt with no message provided.")
         return jsonify({"error": "No message provided"}), 400
+
+    # Intercept hymn-related requests (lyrics, info, or just number)
+    import re
+    hymn_patterns = [
+        r"(?i)what are the lyrics to hymn (\\d+)",
+        r"(?i)what is hymn (\\d+)",
+        r"(?i)show hymn (\\d+)",
+        r"(?i)hymn (\\d+)",
+        r"(?i)tell me about hymn (\\d+)"
+    ]
+    for pattern in hymn_patterns:
+        match = re.match(pattern, user_message.strip())
+        if match:
+            hymn_number = match.group(1)
+            lyrics = get_hymn_lyrics_by_number(hymn_number)
+            if lyrics:
+                return jsonify({"response": lyrics})
+            else:
+                return jsonify({"response": f"Sorry, I couldn't find hymn {hymn_number}."})
 
     # Guest or logged-in user
     logged_in = session.get('logged_in', False)
@@ -501,6 +584,102 @@ def chat_endpoint():
         logging.error(f"Gemini chat error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+from flask_dance.contrib.google import make_google_blueprint, google
+
+# Add Google OAuth config (use environment variables for security)
+GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID")
+GOOGLE_OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET")
+
+if not GOOGLE_OAUTH_CLIENT_ID or not GOOGLE_OAUTH_CLIENT_SECRET:
+    raise ValueError("GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET must be set in the environment")
+
+os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"  # Only for local development
+
+google_bp = make_google_blueprint(
+    client_id=GOOGLE_OAUTH_CLIENT_ID,
+    client_secret=GOOGLE_OAUTH_CLIENT_SECRET,
+    scope=[
+        "openid",
+        "https://www.googleapis.com/auth/userinfo.email",
+        "https://www.googleapis.com/auth/userinfo.profile"
+    ],
+    redirect_url="/login/google/authorized"
+)
+app.register_blueprint(google_bp, url_prefix="/login")
+
+@app.route("/login/google")
+def login_google():
+    logging.info("/login/google route hit. google.authorized=%s", google.authorized)
+    if not google.authorized:
+        logging.info("User not authorized with Google. Redirecting to google.login.")
+        return redirect(url_for("google.login"))
+    resp = google.get("/oauth2/v2/userinfo")
+    logging.info("Google userinfo response: %s", resp.text if resp else None)
+    if not resp.ok:
+        logging.error("Failed to fetch user info from Google. Status: %s", resp.status_code)
+        return "Failed to fetch user info from Google.", 400
+    user_info = resp.json()
+    email = user_info["email"]
+    username = user_info.get("name", email.split("@")[0])
+    user_id = user_info.get("id", email)
+    session["logged_in"] = True
+    session["username"] = username
+    session["user_id"] = user_id
+    session["email"] = email
+    session.permanent = True
+    logging.info(f"Google login: {username} ({email}) user_id={user_id}")
+    # Optionally: create user in DynamoDB if not exists
+    if users_table:
+        try:
+            response = users_table.get_item(Key={"username": username})
+            if "Item" not in response:
+                users_table.put_item(Item={
+                    "username": username,
+                    "user_id": user_id,
+                    "email": email,
+                    "password_hash": "google-oauth"
+                })
+                logging.info(f"Created new Google user in DB: {username}")
+        except Exception as e:
+            logging.error(f"Error creating Google user in DB: {e}")
+    return redirect(url_for("profile"))
+
+@app.route("/login/google/authorized")
+def google_authorized():
+    logging.info("/login/google/authorized route hit. google.authorized=%s", google.authorized)
+    if not google.authorized:
+        logging.info("User not authorized with Google. Redirecting to google.login.")
+        return redirect(url_for("google.login"))
+    resp = google.get("/oauth2/v2/userinfo")
+    logging.info("Google userinfo response: %s", resp.text if resp else None)
+    if not resp.ok:
+        logging.error("Failed to fetch user info from Google. Status: %s", resp.status_code)
+        return "Failed to fetch user info from Google.", 400
+    user_info = resp.json()
+    email = user_info["email"]
+    username = user_info.get("name", email.split("@")[0])
+    user_id = user_info.get("id", email)
+    session["logged_in"] = True
+    session["username"] = username
+    session["user_id"] = user_id
+    session["email"] = email
+    session.permanent = True
+    logging.info(f"Google authorized: {username} ({email}) user_id={user_id}")
+    # Optionally: create user in DynamoDB if not exists
+    if users_table:
+        try:
+            response = users_table.get_item(Key={"username": username})
+            if "Item" not in response:
+                users_table.put_item(Item={
+                    "username": username,
+                    "user_id": user_id,
+                    "email": email,
+                    "password_hash": "google-oauth"
+                })
+                logging.info(f"Created new Google user in DB: {username}")
+        except Exception as e:
+            logging.error(f"Error creating Google user in DB: {e}")
+    return redirect(url_for("profile"))
 
 if __name__ == '__main__':
     print("🚀 Running locally at http://127.0.0.1:5000")

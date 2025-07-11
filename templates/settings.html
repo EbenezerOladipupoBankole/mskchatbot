@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Settings - Musik-Assist</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .settings-container {
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 20px;
+      background-color: #2a2a3d;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+
+    .settings-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .settings-header h1 {
+      font-size: 2rem;
+      color: #00ffcc;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+
+    input[type="text"],
+    input[type="email"] {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 5px;
+      font-size: 1rem;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    .btn:hover {
+      background-color: #0056b3;
+    }
+
+    .logout-btn {
+      background-color: #dc3545;
+      margin-top: 10px;
+    }
+
+    .logout-btn:hover {
+      background-color: #c82333;
+    }
+
+    @media (max-width: 600px) {
+      .settings-container {
+        margin: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="settings-container">
+  <div class="settings-header">
+    <h1>⚙️ Settings</h1>
+    <p>Manage your account and preferences</p>
+  </div>
+
+  <form id="update-profile-form">
+    <div class="form-group">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" placeholder="Enter new username" required />
+    </div>
+
+    <div class="form-group">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" placeholder="Enter new email" required />
+    </div>
+
+    <button type="submit" class="btn">Update Profile</button>
+  </form>
+
+  <div class="form-group">
+    <button class="btn logout-btn" onclick="logout()">🔐 Logout</button>
+  </div>
+
+  <div class="form-group">
+    <button class="btn" onclick="clearHistory()">🗑️ Clear Chat History</button>
+    <p style="font-size: 0.9rem; color: #aaa; margin-top: 5px;">
+      This will clear all saved messages from your chat history.
+    </p>
+  </div>
+</div>
+
+<script>
+  // Load user data when page loads
+  window.onload = function() {
+    fetch('/check_login_status')
+      .then(res => res.json())
+      .then(data => {
+        if (data.logged_in) {
+          document.getElementById('username').value = data.username;
+          if (data.email) document.getElementById('email').value = data.email;
+        } else {
+          alert("You must be logged in to view settings.");
+          window.location.href = "/";
+        }
+      });
+  };
+
+  // Handle profile update
+  document.getElementById('update-profile-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const username = document.getElementById('username').value.trim();
+    const email = document.getElementById('email').value.trim();
+
+    const response = await fetch('/update_profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, email })
+    });
+
+    const result = await response.json();
+    if (response.ok) {
+      alert("Profile updated successfully!");
+    } else {
+      alert(result.error || "Failed to update profile");
+    }
+  });
+
+  // Handle logout
+  async function logout() {
+    const res = await fetch('/logout', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      alert("You've been logged out.");
+      window.location.href = '/';
+    } else {
+      alert(data.error || "Logout failed");
+    }
+  }
+
+  // Handle chat history clear
+  async function clearHistory() {
+    const confirmClear = confirm("Are you sure you want to clear your chat history?");
+    if (!confirmClear) return;
+
+    const res = await fetch('/clear_history', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      alert("Chat history cleared.");
+    } else {
+      alert(data.error || "Failed to clear history.");
+    }
+  }
+</script>
+
+</body>
+</html>
