@@ -1,6 +1,4 @@
 Flask
-Flask-Cors
-python-dotenv
+Flask-Dance[google]
 google-generativeai
-Flask-SQLAlchemy
-Werkzeug
+python-dotenv
