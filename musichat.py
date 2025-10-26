@@ -25,29 +25,47 @@ except (FileNotFoundError, json.JSONDecodeError) as e:
 
 def find_relevant_hymns(query: str, top_n: int = 3) -> List[Dict]:
     """
-    Find relevant hymns using simple text matching.
+    Find relevant hymns using number matching first, then text matching.
     Returns a list of hymns that best match the query.
     """
     if not hymn_data:
         return []
     
-    # Convert query to lowercase for case-insensitive matching
-    query = query.lower()
+    # First, try to extract a hymn number from the query
+    import re
+    number_match = re.search(r'(?:hymn\s*)?(?:no\.?\s*)?(\d+)', query.lower())
+    if number_match:
+        hymn_number = number_match.group(1)
+        # Look for exact hymn number match first
+        for hymn in hymn_data:
+            if hymn.get('number') == hymn_number:
+                return [hymn]
     
-    # Score each hymn based on matches in title and lyrics
+    # If no exact number match or no number in query, do text matching
+    query = query.lower()
     scored_hymns = []
+    
     for hymn in hymn_data:
         score = 0
         title = hymn.get('title', '').lower()
         lyrics = ' '.join(hymn.get('lyrics', [])).lower()
+        hymn_num = hymn.get('number', '')
         
+        # Give highest score to number matches
+        if hymn_num in query or query in hymn_num:
+            score += 10
+            
         # Check title matches
         if query in title:
-            score += 3  # Higher weight for title matches
-        
+            score += 3
+        elif any(word in title for word in query.split()):
+            score += 2
+            
         # Check lyrics matches
         if query in lyrics:
             score += 1
+        elif any(word in lyrics for word in query.split() if len(word) > 2):
+            score += 0.5
             
         # Add hymn to results if it has any matches
         if score > 0:
@@ -60,10 +78,32 @@ def find_relevant_hymns(query: str, top_n: int = 3) -> List[Dict]:
 def format_hymn_for_context(hymn: dict) -> str:
     """Formats a single hymn's data into a readable string for the LLM context."""
     lyrics_text = "\n".join(hymn.get('lyrics', []))
-    return (f"Hymn Number: {hymn.get('number', 'N/A')}\n"
-            f"Title: {hymn.get('title', 'N/A')}\n"
+    musical_info = hymn.get('musical_info', {})
+    
+    # Format musical information
+    musical_details = (
+        f"Musical Information:\n"
+        f"Key Signature: {musical_info.get('key_signature', 'N/A')}\n"
+        f"Time Signature: {musical_info.get('time_signature', 'N/A')}\n"
+        f"Tempo: {musical_info.get('tempo', 'N/A')}\n"
+        f"Meter: {musical_info.get('meter', 'N/A')}\n"
+    )
+    
+    # Format vocal ranges if available
+    ranges = musical_info.get('musical_setting', {}).get('ranges', {})
+    if ranges:
+        musical_details += (
+            f"\nVocal Ranges:\n"
+            f"Soprano: {ranges.get('soprano', 'N/A')}\n"
+            f"Alto: {ranges.get('alto', 'N/A')}\n"
+            f"Tenor: {ranges.get('tenor', 'N/A')}\n"
+            f"Bass: {ranges.get('bass', 'N/A')}\n"
+        )
+    
+    return (f"Hymn #{hymn.get('number', 'N/A')}: {hymn.get('title', 'N/A')}\n"
             f"Author: {hymn.get('author', 'N/A')}\n"
-            f"Composer: {hymn.get('composer', 'N/A')}\n"
+            f"Composer: {hymn.get('composer', 'N/A')}\n\n"
+            f"{musical_details}\n"
             f"Lyrics:\n{lyrics_text}")
 
 
@@ -562,7 +602,7 @@ def chat_endpoint():
         if relevant_hymns:
             context_string = "\n\n---\n\n".join([format_hymn_for_context(hymn) for hymn in relevant_hymns])
             final_prompt = (
-                "Based on the following hymn information, please answer my question.\n\n"
+                "Based on the following hymn information, please answer my question. Do not use any Markdown formatting (no asterisks, underscores, or other special characters) in your response. Present verses with simple line breaks.\n\n"
                 "---CONTEXT---\n"
                 f"{context_string}\n"
                 "---END CONTEXT---\n\n"
