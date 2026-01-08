@@ -5,8 +5,7 @@ from datetime import timedelta
 import time
 import json
 import logging
-from flask import Flask, request, jsonify, session, redirect, url_for
-from flask_cors import CORS
+from flask import Flask, request, jsonify, session, redirect, url_for, render_template
 from flask_session import Session
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -143,40 +142,16 @@ def load_persona_from_file(filepath):
         logging.error(f"Invalid JSON format in persona file: {filepath}")
         return None
 
-
-def load_chat_examples_from_txt(filepath: str) -> List[Dict[str, str]]:
-    """
-    Loads chat examples from a text file, where each pair of lines
-    represents a user and bot message.
-    """
-    examples = []
-    try:
-        with open(filepath, "r", encoding="utf-8") as file:
-            lines = file.read().splitlines()
-            for i in range(0, len(lines) - 1, 2):
-                user_message = lines[i].strip()
-                bot_message = lines[i + 1].strip()
-                examples.append({"user": user_message, "bot": bot_message})
-        logging.info(f"Successfully loaded chat examples from: {filepath}")
-        return examples
-    except FileNotFoundError:
-        logging.warning(f"Chat examples file not found: {filepath}")
-        return []
-    except Exception as e:
-        logging.error(f"Error loading chat examples from {filepath}: {e}")
-        return []
-
 # Get the API key before importing genai
 api_key = os.getenv("GOOGLE_API_KEY")
 if not api_key:
     raise ValueError("GOOGLE_API_KEY is not set in the environment")
 
 # Configure Gemini API
-import google.generativeai as genai
 genai.configure(api_key=api_key)
 
 # Try different model options
-model_options = ['gemini-pro-latest', 'gemini-pro']
+model_options = ['gemini-1.5-flash', 'gemini-pro']
 
 # Get available models
 try:
@@ -199,38 +174,6 @@ for model_name in model_options:
 if not chat_model:
     logging.error("Failed to initialize any chat model")
     raise ValueError("No suitable chat model available")
-
-# --- Continue with the rest of your app setup ---
-
-# Initialize Flask app
-app = Flask(__name__)
-# Enable CORS to allow requests from your Next.js frontend (default port 3000)
-CORS(app, supports_credentials=True, resources={r"/*": {"origins": ["http://localhost:3000"]}})
-
-logging.info(f"Current working directory: {os.getcwd()}")
-# --- Session Cookie Settings for OAuth reliability ---
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['SESSION_COOKIE_SECURE'] = False  # Set to True only if using HTTPS
-
-# --- Configuration from Environment Variables ---
-app.secret_key = os.getenv('FLASK_SECRET_KEY', secrets.token_hex(16))
-if app.secret_key == 'your_flask_secret_key_here':
-    logging.warning("FLASK_SECRET_KEY is not set or is default. Please set a strong secret key in your environment.")
-app.permanent_session_lifetime = timedelta(days=30)
-
-# --- Application Settings ---
-MAX_GUEST_MESSAGES = 40
-
-# Ensure data directory exists
-os.makedirs('data', exist_ok=True)
-
-# Logging configuration
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# Log environment variables (excluding sensitive values)
-logging.info(f"FLASK_SECRET_KEY loaded: {'*' * len(app.secret_key) if app.secret_key else 'None'}")
-logging.info(f"GOOGLE_API_KEY loaded: {'Set' if api_key else 'Not Set'}")
-logging.info(f"MAX_GUEST_MESSAGES set to: {MAX_GUEST_MESSAGES}")
 
 # --- Local Storage Functions ---
 
@@ -300,23 +243,6 @@ def create_user(username: str, email: str, password_hash: str, user_id: str) -> 
     }
     _write_json_file(users_file, users)
     return True
-
-def create_google_user_if_not_exists(username: str, email: str, user_id: str):
-    """Creates a Google OAuth user if they don't exist."""
-    users_file = os.path.join('data', 'users.json')
-    users = _read_json_file(users_file)
-    # Check if user with this email or username exists
-    if not any(u.get('email') == email or k == username for k, u in users.items()):
-        logging.info(f"Creating new Google user: {username}")
-        users[username] = {
-            "username": username,
-            "user_id": user_id,
-            "email": email,
-            "password_hash": "google-oauth"
-        }
-        _write_json_file(users_file, users)
-    else:
-        logging.info(f"Google user '{username}' already exists.")
 
 # Load persona on app startup
 persona_file_path = os.path.join(os.path.dirname(__file__), "persona.json")
@@ -414,34 +340,37 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+@app.context_processor
+def inject_nav_links():
+    """Injects navigation links into the context of all templates."""
+    nav_links = [
+        {'url': url_for('index'), 'text': 'Home'},
+        {'url': url_for('about'), 'text': 'About'},
+    ]
+    if session.get('logged_in'):
+        nav_links.extend([
+            {'url': url_for('profile'), 'text': 'Profile'},
+            {'url': url_for('settings'), 'text': 'Settings'},
+        ])
+    return dict(nav_links=nav_links)
+
+@app.route('/about')
+def about():
+    return render_template('about.html')
+
 @app.route('/profile')
 @login_required
 def profile():
-    """Returns user profile data as JSON."""
-    return jsonify({
-        "username": session.get('username'),
-        "email": session.get('email'),
-        "user_id": session.get('user_id'),
-        "joined": time.strftime('%Y-%m-%d', time.localtime(session.get('login_time', time.time())))
-    })
+    return render_template('profile.html')
 
 @app.route('/settings')
 @login_required
 def settings():
-    """Returns user settings as JSON."""
-    # Placeholder for actual settings logic
-    return jsonify({
-        "theme": "light",
-        "notifications": True
-    })
+    return render_template('settings.html')
 
 @app.route('/')
 def index():
-    """API Health Check."""
-    return jsonify({
-        "status": "online",
-        "message": "Music-Assist Backend API is running. Connect via Next.js Frontend."
-    })
+    return render_template('index.html')
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -663,89 +592,15 @@ def chat_endpoint():
         if logged_in and user_id:
             save_user_chat_history(user_id, chat_history)
         else:
-            # For guests, save history back to the session
-            session['chat_history'] = chat_history
+            request.session['chat_history'] = chat_history
 
-        return jsonify({"response": bot_response})
+        return {"response": bot_response}
 
     except Exception as e:
         logging.error(f"Gemini chat error: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
-
-from flask_dance.contrib.google import make_google_blueprint, google
-
-# Add Google OAuth config (use environment variables for security)
-GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID")
-GOOGLE_OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET")
-
-if not GOOGLE_OAUTH_CLIENT_ID or not GOOGLE_OAUTH_CLIENT_SECRET:
-    raise ValueError("GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET must be set in the environment")
-
-os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"  # Only for local development
-
-google_bp = make_google_blueprint(
-    client_id=GOOGLE_OAUTH_CLIENT_ID,
-    client_secret=GOOGLE_OAUTH_CLIENT_SECRET,
-    scope=[
-        "openid",
-        "https://www.googleapis.com/auth/userinfo.email",
-        "https://www.googleapis.com/auth/userinfo.profile"
-    ],
-    redirect_url="/login/google/authorized"
-)
-app.register_blueprint(google_bp, url_prefix="/login")
-
-@app.route("/login/google")
-def login_google():
-    logging.info("/login/google route hit. google.authorized=%s", google.authorized)
-    if not google.authorized:
-        logging.info("User not authorized with Google. Redirecting to google.login.")
-        return redirect(url_for("google.login"))
-    resp = google.get("/oauth2/v2/userinfo")
-    logging.info("Google userinfo response: %s", resp.text if resp else None)
-    if not resp.ok:
-        logging.error("Failed to fetch user info from Google. Status: %s", resp.status_code)
-        return "Failed to fetch user info from Google.", 400
-    user_info = resp.json()
-    email = user_info["email"]
-    username = user_info.get("name", email.split("@")[0])
-    user_id = user_info.get("id", email)
-    session["logged_in"] = True
-    session["username"] = username
-    session["user_id"] = user_id
-    session["email"] = email
-    session.permanent = True
-    logging.info(f"Google login: {username} ({email}) user_id={user_id}")
-    # Optionally: create user in DynamoDB if not exists
-    create_google_user_if_not_exists(username, email, user_id)
-    return redirect("http://localhost:3000/profile") # Redirect to Frontend
-
-@app.route("/login/google/authorized")
-def google_authorized():
-    logging.info("/login/google/authorized route hit. google.authorized=%s", google.authorized)
-    if not google.authorized:
-        logging.info("User not authorized with Google. Redirecting to google.login.")
-        return redirect(url_for("google.login"))
-    resp = google.get("/oauth2/v2/userinfo")
-    logging.info("Google userinfo response: %s", resp.text if resp else None)
-    if not resp.ok:
-        logging.error("Failed to fetch user info from Google. Status: %s", resp.status_code)
-        return "Failed to fetch user info from Google.", 400
-    user_info = resp.json()
-    email = user_info["email"]
-    username = user_info.get("name", email.split("@")[0])
-    user_id = user_info.get("id", email)
-    session["logged_in"] = True
-    session["username"] = username
-    session["user_id"] = user_id
-    session["email"] = email
-    session.permanent = True
-    logging.info(f"Google authorized: {username} ({email}) user_id={user_id}")
-    # Optionally: create user in DynamoDB if not exists
-    create_google_user_if_not_exists(username, email, user_id)
-    return redirect("http://localhost:3000/profile") # Redirect to Frontend
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == '__main__':
-    print("🚀 Running locally at http://127.0.0.1:5000")
-    # Use a dynamic port for the application
-    app.run(debug=True, host='127.0.0.1', port=5000 if os.getenv("PORT") is None else int(os.getenv("PORT")))
+    import uvicorn
+    print("🚀 Running locally at http://127.0.0.1:8000")
+    uvicorn.run(app, host='127.0.0.1', port=8000)

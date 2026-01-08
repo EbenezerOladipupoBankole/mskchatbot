@@ -180,69 +180,26 @@ class LDSHymnCrawler:
 
         return musical_info
 
-    def crawl_hymns(self, start_num=1, end_num=5):
+    def crawl_hymns(self, start_num=1, end_num=303):
         """Crawl hymn information for a range of hymn numbers."""
         try:
-            # First get the list of all hymns
             hymns = self.get_hymn_list()
+            if not hymns:
+                print("No hymns found, aborting crawl.")
+                return
             
-            for hymn_num, (title, uri) in enumerate(hymns[start_num-1:end_num], start=start_num):
+            # Filter hymns to the desired range
+            hymns_to_crawl = [h for h in hymns if start_num <= h[0] <= end_num]
+            
+            for hymn_number, title, url in hymns_to_crawl:
                 try:
-                    params = {
-                        'lang': 'eng',
-                        'uri': uri,
-                        'platform': 'web',
-                        'domains': 'churchofjesuschrist.org'
-                    }
-                    response = requests.get(self.base_url, headers=self.headers, params=params)
-                    response.raise_for_status()
-                    data = response.json()
-                    
-                    # Extract music metadata from JSON
-                    music_data = data.get('content', {}).get('music', {})
-                    
-                    # Get musical information
-                    musical_info = {
-                        "key_signature": music_data.get('keySignature', ''),
-                        "time_signature": music_data.get('timeSignature', ''),
-                        "tempo": music_data.get('tempo', ''),
-                        "meter": music_data.get('meter', ''),
-                        "musical_setting": {
-                            "harmonization": "SATB",
-                            "ranges": music_data.get('ranges', {})
-                        },
-                        "dynamics": {
-                            "opening": music_data.get('openingDynamic', ''),
-                            "markings": music_data.get('dynamicMarkings', []),
-                            "expression": music_data.get('expression', '')
-                        },
-                        "musical_elements": {
-                            "form": music_data.get('form', ''),
-                            "texture": music_data.get('texture', ''),
-                            "harmony": {
-                                "primary_chords": music_data.get('primaryChords', []),
-                                "cadence": music_data.get('cadence', '')
-                            },
-                            "rhythmic_features": music_data.get('rhythmicFeatures', []),
-                            "melodic_character": music_data.get('melodicCharacter', '')
-                        }
-                    }
-                    
-                    # Store the data
-                    self.hymn_data[str(hymn_num)] = {
-                        "title": title,
-                        **musical_info
-                    }
-                    
-                    print(f"Successfully crawled hymn #{hymn_num}: {title}")
-                    
-                    # Be polite with the server
-                    time.sleep(2)
-                    
+                    musical_info = self.extract_musical_info(url)
+                    if musical_info:
+                        self.hymn_data[str(hymn_number)] = musical_info
+                        print(f"Successfully crawled hymn #{hymn_number}: {title}")
                 except Exception as e:
-                    print(f"Error crawling hymn #{hymn_num}: {e}")
+                    print(f"Error crawling hymn #{hymn_number}: {title}. Error: {e}")
                     continue
-                    
         except Exception as e:
             print(f"Error in crawl_hymns: {e}")
 
@@ -257,18 +214,13 @@ class LDSHymnCrawler:
 
 def main():
     crawler = LDSHymnCrawler()
-    
-    # First get the list of all hymns
-    print("Getting list of hymns...")
-    hymn_list = crawler.get_hymn_list()
-    print(f"Found {len(hymn_list)} hymns")
-    
-    # Crawl the first 5 hymns (you can adjust the range)
-    print("\nStarting to crawl hymns...")
-    crawler.crawl_hymns(1, 5)
-    
-    # Save the results
-    crawler.save_to_json()
+    try:
+        # Crawl all hymns (or a specific range)
+        print("\nStarting to crawl hymns...")
+        crawler.crawl_hymns(start_num=1, end_num=303) # Crawl all hymns
+        crawler.save_to_json()
+    finally:
+        crawler.driver.quit()
 
 if __name__ == "__main__":
     main()
